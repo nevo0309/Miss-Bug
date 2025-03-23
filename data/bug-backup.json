@@ -1,0 +1,58 @@
+[
+  {
+    "_id": "abc123",
+    "title": "Cannot save a new car",
+    "description": "Problem when clicking Save",
+    "severity": 3,
+    "createdAt": 1542107359454
+  },
+  {
+    "_id": "def456",
+    "title": "Login button unresponsive",
+    "description": "Clicking the login button does nothing.",
+    "severity": 2,
+    "createdAt": 1653216548793
+  },
+  {
+    "_id": "ghi789",
+    "title": "Page crashes on load",
+    "description": "Visiting the dashboard causes a crash.",
+    "severity": 5,
+    "createdAt": 1624879651234
+  },
+  {
+    "_id": "jkl012",
+    "title": "Form validation not working",
+    "description": "User can submit the form without filling required fields.",
+    "severity": 3,
+    "createdAt": 1632517896543
+  },
+  {
+    "_id": "mno345",
+    "title": "Search results incorrect",
+    "description": "The search function returns irrelevant results.",
+    "severity": 2,
+    "createdAt": 1618745321478
+  },
+  {
+    "_id": "pqr678",
+    "title": "Images not loading",
+    "description": "Product images do not display in the gallery.",
+    "severity": 4,
+    "createdAt": 1604598712354
+  },
+  {
+    "_id": "stu901",
+    "title": "Email notifications not sent",
+    "description": "Users are not receiving expected email notifications.",
+    "severity": 3,
+    "createdAt": 1667894523689
+  },
+  {
+    "_id": "vwx234",
+    "title": "Dark mode not applying",
+    "description": "Toggling dark mode has no effect on UI.",
+    "severity": 1,
+    "createdAt": 1678951234785
+  }
+]
