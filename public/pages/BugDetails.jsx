@@ -1,5 +1,5 @@
 const { useState, useEffect } = React
-const { Link, useParams } = ReactRouterDOM
+const { Link, useParams, useNavigate } = ReactRouterDOM
 
 import { bugService } from '../services/bug.service.remote.js'
 import { showErrorMsg } from '../services/event-bus.service.js'
@@ -7,12 +7,22 @@ import { showErrorMsg } from '../services/event-bus.service.js'
 export function BugDetails() {
   const [bug, setBug] = useState(null)
   const { bugId } = useParams()
+  const navigate = useNavigate()
 
   useEffect(() => {
     bugService
       .getById(bugId)
       .then((bug) => setBug(bug))
-      .catch((err) => showErrorMsg(`Cannot load bug`, err))
+      .catch((err) => {
+        if (err && err.response.status === 400) {
+          showErrorMsg(
+            '"Whoa there! You’ve hit your free bug preview limit. Come back shortly to continue.'
+          )
+          navigate('/bug')
+        } else {
+          showErrorMsg('Cannot load bug')
+        }
+      })
   }, [])
 
   return (
