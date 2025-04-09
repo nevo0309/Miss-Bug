@@ -1,17 +1,19 @@
 import { utilService } from './util.service.js'
-
 import fs from 'fs'
+
 const PAGE_SIZE = 5
-const bugs = utilService.readJsonFile('data/bug.json')
+const gBugs = utilService.readJsonFile('data/bug.json')
 
 export const bugService = {
   query,
   getById,
   remove,
   save,
+  hasBugs,
 }
+
 function query(filterBy) {
-  return Promise.resolve(bugs).then(bugs => {
+  return Promise.resolve(gBugs).then(bugs => {
     if (filterBy.txt) {
       const regExp = new RegExp(filterBy.txt, 'i')
       bugs = bugs.filter(bug => regExp.test(bug.title))
@@ -20,6 +22,9 @@ function query(filterBy) {
     if (filterBy.severity) {
       bugs = bugs.filter(bug => bug.severity >= filterBy.severity)
     }
+    if (filterBy.userId) {
+      bugs = bugs.filter(bug => bug.creator && bug.creator._id === filterBy.userId)
+    }
 
     const total = bugs.length
 
@@ -27,6 +32,7 @@ function query(filterBy) {
       const startIdx = filterBy.pageIdx * PAGE_SIZE
       bugs = bugs.slice(startIdx, startIdx + PAGE_SIZE)
     }
+
     if (filterBy.sortBy) {
       const dir = filterBy.sortDir === 'des' ? -1 : 1
       bugs.sort((a, b) => {
@@ -43,41 +49,60 @@ function query(filterBy) {
 }
 
 function getById(bugId) {
-  // return Promise.reject('NOT NOW!')
-  const bug = bugs.find(bug => bug._id === bugId)
+  const bug = gBugs.find(bug => bug._id === bugId)
   if (!bug) return Promise.reject('Cannot find bug - ' + bugId)
   return Promise.resolve(bug)
 }
 
-function remove(bugId) {
-  // return Promise.reject('NOT NOW!')
-  const bugIdx = bugs.findIndex(bug => bug._id === bugId)
-  if (bugIdx === -1) return Promise.reject('Cannot remove bug - ' + bugId)
-  bugs.splice(bugIdx, 1)
+function hasBugs(userId) {
+  const has = gBugs.some(bug => bug.creator._id === userId)
+  return has ? Promise.reject('Cannot remove user with bugs') : Promise.resolve()
+}
+
+function remove(bugId, loggedinUser) {
+  const idx = gBugs.findIndex(bug => bug._id === bugId)
+  if (idx === -1) return Promise.reject('No bug found')
+
+  console.log('Logged in user:', loggedinUser)
+  console.log('Bug creator:', gBugs[idx].creator)
+
+  if (!isAuthorized(gBugs[idx], loggedinUser)) {
+    return Promise.reject('Not authorized to delete this bug')
+  }
+
+  gBugs.splice(idx, 1)
   return _saveBugsToFile()
 }
 
-function save(bugToSave) {
-  // return Promise.reject('NOT NOW!')
+function save(bugToSave, loggedinUser) {
   if (bugToSave._id) {
-    const bugIdx = bugs.findIndex(bug => bug._id === bugToSave._id)
-    bugs[bugIdx] = { ...bugs[bugIdx], ...bugToSave }
+    const bugIdx = gBugs.findIndex(bug => bug._id === bugToSave._id)
+    if (bugIdx === -1) return Promise.reject('No bug found')
+
+    if (!isAuthorized(gBugs[bugIdx], loggedinUser)) {
+      return Promise.reject('Not authorized to update this bug')
+    }
+
+    gBugs[bugIdx] = { ...gBugs[bugIdx], ...bugToSave }
   } else {
     bugToSave._id = utilService.makeId()
     bugToSave.createdAt = Date.now()
-    bugs.unshift(bugToSave)
+    gBugs.unshift(bugToSave)
   }
 
   return _saveBugsToFile().then(() => bugToSave)
 }
 
+function isAuthorized(bug, loggedinUser) {
+  if (!bug.creator) return loggedinUser.isAdmin
+  return bug.creator._id === loggedinUser._id || loggedinUser.isAdmin
+}
+
 function _saveBugsToFile() {
   return new Promise((resolve, reject) => {
-    const data = JSON.stringify(bugs, null, 4)
+    const data = JSON.stringify(gBugs, null, 4)
     fs.writeFile('data/bug.json', data, err => {
-      if (err) {
-        return reject(err)
-      }
+      if (err) return reject(err)
       resolve()
     })
   })
