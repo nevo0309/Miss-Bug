@@ -1,8 +1,12 @@
-import express from 'express'
 import path from 'path'
+import express from 'express'
 import cookieParser from 'cookie-parser'
+
 import { bugService } from './services/bug.service.js'
+import { userService } from './services/user.service.js'
 import { loggerService } from './services/logger.service.js'
+import { authService } from './services/auth.servic.js'
+import { requiredAuth } from './middlewares/requiredAuth.middleWare.js'
 
 const port = 3030
 const app = express()
@@ -18,6 +22,7 @@ app.get('/api/bug', (req, res) => {
     pageIdx: req.query.pageIdx,
     sortBy: req.query.sortBy,
     sortDir: req.query.sortDir,
+    userId: req.query.userId,
   }
   bugService
     .query(filterBy)
@@ -29,9 +34,9 @@ app.get('/api/bug', (req, res) => {
 })
 
 //* Create
-app.post('/api/bug', (req, res) => {
+app.post('/api/bug', requiredAuth, (req, res) => {
   // loggerService.debug('req qurey', req.query)
-
+  const { loggedinUser } = req
   const { title, description, severity, _id, lables } = req.body
   const bugToSave = {
     _id,
@@ -40,6 +45,8 @@ app.post('/api/bug', (req, res) => {
     severity: +severity,
     lables: lables || [],
   }
+  bugToSave.creator = { ...loggedinUser }
+  delete bugToSave.creator.username
 
   bugService
     .save(bugToSave)
@@ -55,45 +62,26 @@ app.post('/api/bug', (req, res) => {
 })
 
 //Update
-app.put('/api/bug/:bugId', (req, res) => {
-  // loggerService.debug('req qurey', req.query)
-
-  const { title, description, severity, _id, lables } = req.body
-  const bugToSave = {
-    _id,
-    title,
-    description,
-    severity: +severity,
-    lables: lables || [],
-  }
+app.put('/api/bug/:bugId', requiredAuth, (req, res) => {
+  const { loggedinUser } = req
+  const bugToSave = { ...req.body }
+  bugToSave.severity = +bugToSave.severity
 
   bugService
-    .save(bugToSave)
-    .then(bug => {
-      loggerService.info('Saved bug:', bug)
-
-      res.send(bug)
+    .getById(bugToSave._id)
+    .then(existingBug => {
+      bugToSave.creator = existingBug.creator
+      return bugService.save(bugToSave, loggedinUser)
+    })
+    .then(savedBug => {
+      loggerService.info('Saved bug:', savedBug)
+      res.send(savedBug)
     })
     .catch(err => {
       loggerService.error('Cannot edit bug', err)
       res.status(500).send('Cannot edit bug')
     })
 })
-// app.get('/api/bug/save', (req, res) => {
-//   const bugToSave = {
-//     _id: req.query._id,
-//     vendor: req.query.title,
-//     severity: +req.query.severity,
-//   }
-
-//   bugService
-//     .save(bugToSave)
-//     .then((bug) => res.send(bug))
-//     .catch((err) => {
-//       loggerService.error('Cannot save bug', err)
-//       res.status(500).send('Cannot save bug')
-//     })
-// })
 
 //* Get/Read by id
 app.get('/api/bug/:bugId', (req, res) => {
@@ -112,10 +100,15 @@ app.get('/api/bug/:bugId', (req, res) => {
 })
 
 //* Remove/Delete
-app.delete('/api/bug/:bugId', (req, res) => {
+app.delete('/api/bug/:bugId', requiredAuth, (req, res) => {
+  // const loggedinUser = authService.validateToken(req.cookies.loginToken)
+  // if (!loggedinUser) return res.status(401).send(`Can't delete bug`)
+  const { loggedinUser } = req
+
   const { bugId } = req.params
+
   bugService
-    .remove(bugId)
+    .remove(bugId, loggedinUser)
     .then(() => {
       loggerService.info(`bug ${bugId} removed`)
       res.send('bug Removed')
@@ -124,6 +117,82 @@ app.delete('/api/bug/:bugId', (req, res) => {
       loggerService.error('Cannot remove bug', err)
       res.status(500).send('Cannot remove bug')
     })
+})
+
+/////////////////////////////////// User API//////////////////////////////
+app.get('/api/user', (req, res) => {
+  userService
+    .query()
+    .then(users => res.send(users))
+    .catch(err => {
+      loggerService.error('Cannot load users', err)
+      res.status(400).send('Cannot load users')
+    })
+})
+
+app.get('/api/user/:userId', (req, res) => {
+  const { userId } = req.params
+
+  userService
+    .getById(userId)
+    .then(user => res.send(user))
+    .catch(err => {
+      loggerService.error('Cannot load user', err)
+      res.status(400).send('Cannot load user')
+    })
+})
+
+app.delete('/api/user/:userId', (req, res) => {
+  const { loginToken } = req.cookies
+  const loggedinUser = authService.validateToken(loginToken)
+  if (!loggedinUser || !loggedinUser.isAdmin) return res.status(401).send('Cannot remove user')
+
+  const { userId } = req.params
+
+  bugService
+    .hasBugs(userId)
+    .then(() => userService.remove(userId))
+    .then(() => res.send('Removed!'))
+    .catch(err => {
+      loggerService.error('Cannot delete user!', err)
+      res.status(400).send(err)
+    })
+})
+
+////////////////////////////////// Auth API //////////////////////////////////
+app.post('/api/auth/login', (req, res) => {
+  const credentials = req.body
+
+  authService
+    .checkLogin(credentials)
+    .then(user => {
+      const loginToken = authService.getLoginToken(user)
+      res.cookie('loginToken', loginToken)
+      res.send(user)
+    })
+    .catch(() => res.status(404).send('Invalid Credentials'))
+})
+
+app.post('/api/auth/signup', (req, res) => {
+  const credentials = req.body
+
+  userService
+    .add(credentials)
+    .then(user => {
+      if (user) {
+        const loginToken = authService.getLoginToken(user)
+        res.cookie('loginToken', loginToken)
+        res.send(user)
+      } else {
+        res.status(400).send('Cannot signup')
+      }
+    })
+    .catch(err => res.status(400).send('Username taken.'))
+})
+
+app.post('/api/auth/logout', (req, res) => {
+  res.clearCookie('loginToken')
+  res.send('logged-out!')
 })
 
 app.get('/**', (req, res) => {
